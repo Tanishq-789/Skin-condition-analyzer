@@ -1,85 +1,103 @@
+# skin_rec_UI.py
+
 import streamlit as st
+from PIL import Image
 import numpy as np
-from tensorflow.keras.models import load_model
-from tensorflow.keras.preprocessing import image
+import tensorflow as tf
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+import tempfile
+import os
+import google.generativeai as genai
+from tensorflow.keras.applications.efficientnet_v2 import preprocess_input  # ✅ Corrected
 
-# Ensure correct model path and input image size
-MODEL_PATH = 'skin_condition_model.keras'
-IMAGE_SIZE = (224, 224)
+# -------------------- CONFIG --------------------
+# Set Gemini API key securely via .streamlit/secrets.toml
+genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+gemini_model = genai.GenerativeModel("gemini-1.5-flash")
 
-
-# Load your model with caching
-@st.cache_resource
-def load_model_cached():
-    return load_model(MODEL_PATH)
-
-
-model = load_model_cached()
-
-# Define class names and remedies
+# Load the trained model (should be saved in .keras format)
+model = tf.keras.models.load_model("skin_model.keras")
 class_names = ["Acne", "Carcinoma", "Eczema", "Keratosis", "Milia", "Rosacea"]
 
-remedies_info = {
-    "Acne": ["Use Salicylic Acid", "Avoid Dairy Products", "Use Non-comedogenic Moisturizers", "Exfoliate Regularly",
-             "Hydrate the Skin"],
-    "Carcinoma": ["Use Sunscreen", "Avoid Tanning Beds", "Get Regular Skin Checkups", "Use Retinoids",
-                  "Maintain Healthy Diet"],
-    "Eczema": ["Use Moisturizers", "Avoid Triggers like Fragrances", "Use Topical Steroids", "Take Lukewarm Baths",
-               "Wear Soft Fabrics"],
-    "Keratosis": ["Exfoliate Gently", "Use Retinoids", "Moisturize Daily", "Use Lactic Acid",
-                  "Consult a Dermatologist"],
-    "Milia": ["Exfoliate Gently", "Avoid Heavy Creams", "Use Retinoids", "Keep Face Clean", "Do Not Pick at Milia"],
-    "Rosacea": ["Use Gentle Skincare", "Avoid Spicy Foods", "Wear Sunscreen", "Avoid Alcohol",
-                "Use Green-Tinted Moisturizers"]
-}
+# -------------------- FUNCTIONS --------------------
+
+def get_prediction(image):
+    """Resize and preprocess image, then predict class."""
+    img = image.resize((224, 224))
+    arr = np.array(img).astype("float32")
+    arr = np.expand_dims(arr, axis=0)
+    arr = preprocess_input(arr)  # ✅ Use official EfficientNetV2 preprocessing
+    preds = model.predict(arr)[0]
+    idx = np.argmax(preds)
+    return class_names[idx], preds[idx], preds
 
 
-def preprocess_image(uploaded_file):
-    """Preprocesses the uploaded image to ensure correct format."""
-    try:
-        # Load image with target size
-        img = image.load_img(uploaded_file, target_size=IMAGE_SIZE)
-        img_array = image.img_to_array(img) / 255.0  # Normalize the image
-        img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension (1, 224, 224, 3)
-        return img_array
-    except Exception as e:
-        st.error(f"Error processing image: {e}")
-        return None
+def query_gemini(prompt):
+    """Query Gemini 1.5 Flash model."""
+    response = gemini_model.generate_content(prompt)
+    return response.text
 
 
-def predict_skin_condition(img_array):
-    """Predicts the skin condition from preprocessed image array."""
-    prediction = model.predict(img_array)
-    predicted_label = np.argmax(prediction, axis=1)[0]
-    predicted_class_name = class_names[predicted_label]
-    return predicted_class_name
+def generate_pdf_report(file_path, prediction, confidence, skincare_plan, explanation):
+    """Create a basic skin condition PDF report."""
+    c = canvas.Canvas(file_path, pagesize=letter)
+    c.drawString(50, 750, "🧠 Skin Condition Report")
+    c.drawString(50, 720, f"Condition: {prediction} ({confidence * 100:.2f}% confidence)")
+    c.drawString(50, 690, "🧠 Severity Analysis:")
+    c.drawString(70, 670, explanation[:250])
+    c.drawString(50, 630, "🧴 Skincare Plan:")
+    c.drawString(70, 610, skincare_plan[:250])
+    c.save()
+    return file_path
 
+# -------------------- STREAMLIT UI --------------------
 
-# Streamlit app
-st.title("Skin Condition Detector")
-st.write("Upload an image of your skin condition to get a prediction and remedies.")
+st.set_page_config(page_title="Skin Condition Classifier", layout="wide")
+st.title("🧠 AI-Powered Skin Condition Classifier")
 
-# File uploader
-uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
+uploaded_file = st.file_uploader("📷 Upload a clear skin image", type=["jpg", "jpeg", "png"])
 
-if uploaded_file is not None:
-    img_array = preprocess_image(uploaded_file)
+if uploaded_file:
+    image = Image.open(uploaded_file).convert("RGB")
+    st.image(image, caption="Uploaded Image", use_column_width=True)
 
-    if img_array is not None:
-        # Ensure the correct input shape
-        st.write(f"Image array shape: {img_array.shape}")
+    with st.spinner("Analyzing image..."):
+        prediction, confidence, _ = get_prediction(image)
+        st.success(f"🧬 Prediction: **{prediction}** ({confidence * 100:.2f}% confidence)")
 
-        # Predict the skin condition
-        predicted_condition = predict_skin_condition(img_array)
+        # ------------------ Severity Analysis ------------------
+        severity_prompt = f"A user has {prediction}. The model has {confidence*100:.2f}% confidence. Rate the severity as Mild, Moderate, or Severe with brief explanation."
+        severity = query_gemini(severity_prompt)
+        st.info(f"🩺 **Severity**: {severity}")
 
-        # Retrieve remedies for the predicted condition
-        remedies = remedies_info.get(predicted_condition, ["No remedies found"])
+        # ------------------ Ingredient Analysis ------------------
+        ingredients = st.text_area("🔍 Enter product ingredients (comma-separated):")
+        if ingredients:
+            ingredient_prompt = f"Analyze these ingredients for someone with {prediction}: {ingredients}. Identify helpful vs harmful ones."
+            analysis = query_gemini(ingredient_prompt)
+            st.markdown("📊 **Ingredient Analysis:**")
+            st.write(analysis)
 
-        # Display the results
-        st.image(uploaded_file, caption='Uploaded Image', use_column_width=True)
-        st.write(f"**Predicted Skin Condition:** {predicted_condition}")
-        st.write("**Top Remedies:**")
-        for i, remedy in enumerate(remedies[:5], 1):
-            st.write(f"{i}. {remedy}")
-    else:
-        st.write("Image preprocessing failed. Please try again.")
+        # ------------------ Personalized Skincare Plan ------------------
+        skin_type = st.selectbox("Your Skin Type", ["Oily", "Dry", "Combination", "Sensitive"])
+        age = st.slider("Your Age", 10, 70, 25)
+        plan_prompt = f"Generate a 7-day skincare routine for a {age}-year-old with {skin_type} skin suffering from {prediction}."
+        skincare_plan = query_gemini(plan_prompt)
+        st.markdown("📅 **Skincare Plan:**")
+        st.text(skincare_plan)
+
+        # ------------------ Gemini Q&A Chatbox ------------------
+        st.markdown("💬 **Ask a Dermatology-related Question:**")
+        user_q = st.text_input("Your question")
+        if user_q:
+            full_prompt = f"User has {prediction}. Question: {user_q}. Respond with medically relevant, educational insight (non-diagnostic)."
+            answer = query_gemini(full_prompt)
+            st.write(answer)
+
+        # ------------------ PDF Download ------------------
+        if st.button("📄 Generate PDF Report"):
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                path = generate_pdf_report(tmp.name, prediction, confidence, skincare_plan, severity)
+                with open(path, "rb") as f:
+                    st.download_button("⬇️ Download PDF Report", f, file_name="skin_report.pdf", mime="application/pdf")
