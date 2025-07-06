@@ -144,6 +144,8 @@ npm run dev
 - **ML Framework**: TensorFlow/Keras
 - **AI Service**: Gemini API
 - **PDF Generation**: ReportLab
+- **Dataset Link**: [Skin_Dataset](https://www.kaggle.com/datasets/syedalinaqvi/augmented-skin-conditions-image-dataset) 
+- **Deployed Skintype Detection Model** [Hugging Face](https://huggingface.co/Tanishq77/skin-condition-classifier/tree/main)
 
 ---
 
