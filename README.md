@@ -1,6 +1,6 @@
 # 🧠 Skin Diagnosis App — AI-Powered Dermatology Assistant
 
-An end-to-end full-stack web application that uses **AI and deep learning** to diagnose **6 common skin conditions** from facial images, suggest personalized skincare routines, analyze product ingredients, and generate professional reports — all with the power of 🧠 **Gemini AI** and 📸 **EfficientNetV2B0**.
+An end-to-end full-stack web application that uses **AI and deep learning** to diagnose **6 common skin conditions** from facial images, suggest personalized skincare routines, analyze product ingredients, and generate professional reports — all with the power of 🧠 **Gemini AI** and 📸 **EfficientNetV2B0** .
 
 ---
 
