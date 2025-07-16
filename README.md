@@ -9,7 +9,7 @@ An end-to-end web application built with **Streamlit** that uses AI and deep lea
 This project is a monolithic Streamlit application. The model file is hosted on Hugging Face and downloaded on the first run.
 ```
 skin-condition-app/
-├── 📄 app.py               # The main Streamlit application script
+├── 📄 Skincare_rec.py               # The main Streamlit application script
 ├── 📄 requirements.txt     # Python dependencies for deployment
 ├── 📁 .streamlit/
 │   └── secrets.toml        # For storing API keys securely
