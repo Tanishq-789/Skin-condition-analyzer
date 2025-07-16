@@ -1,156 +1,102 @@
-# 🧠 Skin Diagnosis App — AI-Powered Dermatology Assistant
+# 🧠 AI Skincare Assistant
 
-An end-to-end full-stack web application that uses **AI and deep learning** to diagnose **6 common skin conditions** from facial images, suggest personalized skincare routines, analyze product ingredients, and generate professional reports — all with the power of 🧠 **Gemini AI** and 📸 **EfficientNetV2B0**.
+An end-to-end web application built with **Streamlit** that uses AI and deep learning to diagnose **6 common skin conditions** from images, provide personalized recommendations, and help users find local dermatologists.
 
 ---
 
 ## 🏗️ Project Structure
 
+This project is a monolithic Streamlit application. The model file is hosted on Hugging Face and downloaded on the first run.
 ```
-skin-diagnosis-app/
-├── 📁 backend/          # FastAPI backend for ML prediction, Gemini API, and PDF generation
-├── 📁 frontend/         # ReactJS frontend with user-friendly UI
-├── README.md            # Project overview (this file)
-└── .gitignore
+skin-condition-app/
+├── 📄 app.py               # The main Streamlit application script
+├── 📄 requirements.txt     # Python dependencies for deployment
+├── 📁 .streamlit/
+│   └── secrets.toml        # For storing API keys securely
+└── README.md               # Project overview (this file)
 ```
 
 ---
 
 ## 🧩 Features
 
-### 🔍 Skin Condition Prediction
-- Upload a face image
-- Detects one of the following:
-  - **Acne**
-  - **Carcinoma** 
-  - **Eczema**
-  - **Keratosis**
-  - **Milia**
-  - **Rosacea**
+-   **🔍 Skin Condition Prediction**
+    -   Upload a clear image of a skin concern.
+    -   The app uses a fine-tuned **EfficientNetV2B0** model to predict one of six conditions:
+        -   Acne
+        -   Carcinoma
+        -   Eczema
+        -   Keratosis
+        -   Milia
+        -   Rosacea
 
-### 🤖 AI-Powered Analysis
-- Uses **Gemini AI** to:
-  - Rate condition severity
-  - Analyze skincare product ingredients
+-   **🤖 AI-Powered Recommendations**
+    -   Utilizes the **Gemini AI API** to provide instant, personalized advice based on the prediction.
+    -   Generates actionable home remedies and a tailored 7-day skincare plan.
 
-### 🧴 Personalized Skincare Plan
-- Tailors a **7-day skincare routine** based on:
-  - Age
-  - Skin type 
-  - Condition
-
-### 📄 PDF Report Generation
-- Creates downloadable reports with:
-  - Prediction results
-  - AI explanation
-  - Suggested treatment plan
-
----
-
-## 🔙 Backend (`/backend`)
-
-| File | Description |
-|------|-------------|
-| `main.py` | FastAPI application entry point |
-| `model/skin_model.keras` | Trained Keras model (EfficientNetV2B0) |
-| `model/predictor.py` | Image preprocessing and prediction |
-| `services/gemini_client.py` | Gemini API integration |
-| `utils/pdf_generator.py` | PDF report generation |
-| `schemas/request_response.py` | Pydantic models for API schemas |
-| `.env` | Environment variables |
-| `requirements.txt` | Python dependencies |
-
----
-
-## 🖼️ Frontend (`/frontend`)
-
-| File | Description |
-|------|-------------|
-| `public/index.html` | Application root HTML |
-| `src/components/` | React components (Upload, Results, etc.) |
-| `src/pages/Home.jsx` | Main application page |
-| `src/services/api.js` | API service configuration |
-| `src/styles/app.css` | Custom styles |
-| `.env` | Frontend environment variables |
-| `App.jsx` | Root React component |
-| `package.json` | Frontend dependencies |
+-   **👩‍⚕️ Consult Dermatologists**
+    -   An integrated feature to find local dermatologists for professional consultation.
+    -   Users can enter their city, and the app scrapes **Justdial.com** to provide a list of top-rated specialists with their name, location, and contact number.
 
 ---
 
 ## 🚀 How to Run Locally
 
-### Backend Setup
+1.  **Clone the Repository**
+    ```bash
+    git clone [https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git](https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git)
+    cd YOUR_REPO_NAME
+    ```
 
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-```
+2.  **Create and Activate a Virtual Environment**
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # On Windows: venv\Scripts\activate
+    ```
 
-Create `.env` file:
-```ini
-GEMINI_API_KEY=your_google_gemini_api_key
-```
+3.  **Install Dependencies**
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-Start backend:
-```bash
-uvicorn main:app --reload
-```
+4.  **Set Up API Key**
+    -   Create a folder named `.streamlit` in your project directory.
+    -   Inside it, create a file named `secrets.toml`.
+    -   Add your Gemini API key to the file:
+    ```ini
+    GEMINI_API_KEY="your_google_gemini_api_key"
+    ```
 
-### Frontend Setup
-
-```bash
-cd frontend
-npm install
-```
-
-Create `.env` file:
-```ini
-VITE_BACKEND_URL=http://localhost:8000
-```
-
-Start frontend:
-```bash
-npm run dev
-```
-
----
-
-## 🌐 API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/predict/` | Image upload and prediction |
-| POST | `/analyze/ingredients` | Ingredient analysis |
-| POST | `/generate-plan` | Skincare plan generation | 
-| POST | `/generate-pdf` | PDF report generation |
+5.  **Run the Streamlit App**
+    ```bash
+    streamlit run app.py
+    ```
+    The app will automatically download the required Keras model from Hugging Face on the first run.
 
 ---
 
 ## 📊 Model Information
 
-- **Architecture**: EfficientNetV2B0 (ImageNet pretrained)
-- **Accuracy**: ~95.6%
-- **Loss Function**: Sparse Categorical Crossentropy
-- **Training**: Fine-tuned with class weights
+-   **Architecture**: **EfficientNetV2B0** (pretrained on ImageNet)
+-   **Accuracy**: Achieved **~95.6%** accuracy on the test dataset.
+-   **Loss Function**: Sparse Categorical Crossentropy
+-   **Training**: Fine-tuned on the augmented skin condition dataset with class weights to handle imbalances.
 
 ---
 
 ## 📦 Tech Stack
 
-- **Frontend**: React + Vite
-- **Backend**: FastAPI
-- **ML Framework**: TensorFlow/Keras
-- **AI Service**: Gemini API
-- **PDF Generation**: ReportLab
-- **Dataset Link**: [Skin_Dataset](https://www.kaggle.com/datasets/syedalinaqvi/augmented-skin-conditions-image-dataset) 
-- **Deployed Skintype Detection Model** [Hugging Face](https://huggingface.co/Tanishq77/skin-condition-classifier/tree/main)
+-   **Framework**: Streamlit
+-   **ML Framework**: TensorFlow / Keras
+-   **AI Service**: Gemini API
+-   **Web Scraping**: Selenium, BeautifulSoup4
+-   **Deployed Model**: [skin-condition-classifier on Hugging Face](https://huggingface.co/Tanishq77/skin-condition-classifier/tree/main)
+-   **Dataset**: [Augmented Skin Conditions Dataset on Kaggle](https://www.kaggle.com/datasets/syedalinaqvi/augmented-skin-conditions-image-dataset)
 
 ---
 
 ## ✍️ Author
 
-**Tanishq Shinde**  
-🎓 B.E. Computer Engineering, PICT  
+**Tanishq Shinde**
+🎓 B.E. Computer Engineering, PICT
 🌐 [GitHub](https://github.com/) | [LinkedIn](https://linkedin.com/) | [Hugging Face](https://huggingface.co/)
