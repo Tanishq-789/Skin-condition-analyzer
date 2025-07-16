@@ -1,6 +1,6 @@
 # 🧠 AI Skincare Assistant
 
-An end-to-end web application built with **Streamlit** that uses AI and deep learning to diagnose **6 common skin conditions** from images, provide personalized recommendations, and help users find local dermatologists.
+An end-to-end AI-powered web application built with Streamlit that leverages a deep learning model (EfficientNetV2B0) to classify six common skin conditions from facial images, generates personalized treatment plans using Gemini LLM, analyzes skincare ingredients, and assists users in locating local dermatologists through location-based web scraping.
 
 ---
 
