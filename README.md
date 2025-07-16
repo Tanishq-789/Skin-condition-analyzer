@@ -94,7 +94,23 @@ skin-condition-app/
 -   **Dataset**: [Augmented Skin Conditions Dataset on Kaggle](https://www.kaggle.com/datasets/syedalinaqvi/augmented-skin-conditions-image-dataset)
 
 ---
+### 🧪 Web App Results
 
+## Home Page :
+<img src="https://github.com/user-attachments/assets/6c4aa462-de6e-40f8-9970-cc88d31423e4" alt="Home Page" width="600"/>
+
+## Prediction Page :
+<img src="https://github.com/user-attachments/assets/74f3823a-bb33-4651-999a-7608b9634956" alt="Prediction Page" width="600"/>
+
+## Remedies Page :
+<img src="https://github.com/user-attachments/assets/13c9168f-bf7c-4457-b1d7-60813e4dc093" alt="Remedies Page" width="600"/>
+
+## Consult Experts Section :
+<img src="https://github.com/user-attachments/assets/2da881e3-babb-40e2-ac1c-3c0d26ddef22" alt="Consult Experts" width="600"/>
+
+
+
+---
 ## ✍️ Author
 
 **Tanishq Shinde**
