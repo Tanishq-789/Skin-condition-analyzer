@@ -1,0 +1,8 @@
+streamlit
+tensorflow
+Pillow
+google-generativeai
+selenium
+webdriver-manager-chrome
+beautifulsoup4
+requests
