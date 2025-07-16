@@ -4,100 +4,171 @@ import streamlit as st
 from PIL import Image
 import numpy as np
 import tensorflow as tf
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
-import tempfile
-import os
 import google.generativeai as genai
-from tensorflow.keras.applications.efficientnet_v2 import preprocess_input  # ✅ Corrected
+import time
+from bs4 import BeautifulSoup
+
+# --- New imports for the working scraper ---
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
 # -------------------- CONFIG --------------------
-# Set Gemini API key securely via .streamlit/secrets.toml
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-gemini_model = genai.GenerativeModel("gemini-1.5-flash")
 
-# Load the trained model (should be saved in .keras format)
-model = tf.keras.models.load_model("skin_model.keras")
+st.set_page_config(page_title="Skincare AI Assistant", layout="centered")
+
+# --- AI & MODEL CONFIGURATION ---
+try:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+except Exception as e:
+    st.error(f"Error configuring Gemini API: {e}")
+    st.stop()
+
+try:
+    model = tf.keras.models.load_model("skin_model.keras")
+except Exception as e:
+    st.error(f"Error loading skin_model.keras: {e}")
+    st.stop()
+
 class_names = ["Acne", "Carcinoma", "Eczema", "Keratosis", "Milia", "Rosacea"]
 
-# -------------------- FUNCTIONS --------------------
+
+# -------------------- BACKEND FUNCTIONS --------------------
 
 def get_prediction(image):
-    """Resize and preprocess image, then predict class."""
+    """Resize, preprocess, and predict the skin condition from an image."""
     img = image.resize((224, 224))
     arr = np.array(img).astype("float32")
     arr = np.expand_dims(arr, axis=0)
-    arr = preprocess_input(arr)  # ✅ Use official EfficientNetV2 preprocessing
+    arr = tf.keras.applications.efficientnet_v2.preprocess_input(arr)
     preds = model.predict(arr)[0]
     idx = np.argmax(preds)
-    return class_names[idx], preds[idx], preds
+    confidence = float(preds[idx])
+    return class_names[idx], confidence
 
 
-def query_gemini(prompt):
-    """Query Gemini 1.5 Flash model."""
-    response = gemini_model.generate_content(prompt)
-    return response.text
+def get_gemini_response(prompt):
+    """Query the Gemini model and return the response text."""
+    try:
+        response = gemini_model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"Error communicating with Gemini: {e}"
 
 
-def generate_pdf_report(file_path, prediction, confidence, skincare_plan, explanation):
-    """Create a basic skin condition PDF report."""
-    c = canvas.Canvas(file_path, pagesize=letter)
-    c.drawString(50, 750, "🧠 Skin Condition Report")
-    c.drawString(50, 720, f"Condition: {prediction} ({confidence * 100:.2f}% confidence)")
-    c.drawString(50, 690, "🧠 Severity Analysis:")
-    c.drawString(70, 670, explanation[:250])
-    c.drawString(50, 630, "🧴 Skincare Plan:")
-    c.drawString(70, 610, skincare_plan[:250])
-    c.save()
-    return file_path
+def scrape_justdial(city: str):
+    """
+    Scrapes dermatologist details from Justdial using Selenium to handle dynamic content.
+    """
+    clinic_list = []
+    sanitized_city = city.lower().strip().replace(" ", "-")
+    url = f"https://www.justdial.com/{sanitized_city}/Dermatologists"
+
+    try:
+        options = webdriver.ChromeOptions()
+        options.add_argument('--headless')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument(
+            'user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
+
+        with webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options) as driver:
+            driver.get(url)
+            # Increased wait time for Justdial's dynamic content
+            time.sleep(7)
+            page_source = driver.page_source
+
+        soup = BeautifulSoup(page_source, 'html.parser')
+        clinic_cards = soup.select("div.resultbox")
+
+        if not clinic_cards:
+            return []
+
+        for card in clinic_cards:
+            name_element = card.select_one('h3.resultbox_title_anchor')
+            location_element = card.select_one('div.locatcity')
+            contact_element = card.select_one('span.callcontent')
+
+            if name_element:
+                name = name_element.text.strip()
+                location = location_element.text.strip() if location_element else "Location not available"
+                contact = contact_element.text.strip() if contact_element else "Contact not available"
+
+                clinic_list.append({"name": name, "location": location, "contact": contact})
+
+    except Exception as e:
+        st.error(f"An error occurred during scraping: {e}")
+        return None
+
+    return clinic_list
+
 
 # -------------------- STREAMLIT UI --------------------
 
-st.set_page_config(page_title="Skin Condition Classifier", layout="wide")
-st.title("🧠 AI-Powered Skin Condition Classifier")
+st.title("🌿 AI Skincare Assistant")
+st.markdown(
+    "Upload a clear image of your skin concern. Our AI will analyze it, suggest remedies, and help you find local professionals.")
+
+st.warning(
+    "⚠️ **Disclaimer:** This tool provides AI-generated suggestions and is not a substitute for professional medical advice. Please consult a certified dermatologist for an accurate diagnosis.")
 
 uploaded_file = st.file_uploader("📷 Upload a clear skin image", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
     image = Image.open(uploaded_file).convert("RGB")
-    st.image(image, caption="Uploaded Image", use_column_width=True)
 
-    with st.spinner("Analyzing image..."):
-        prediction, confidence, _ = get_prediction(image)
-        st.success(f"🧬 Prediction: **{prediction}** ({confidence * 100:.2f}% confidence)")
+    with st.spinner("Analyzing your skin and preparing recommendations..."):
+        prediction, confidence = get_prediction(image)
 
-        # ------------------ Severity Analysis ------------------
-        severity_prompt = f"A user has {prediction}. The model has {confidence*100:.2f}% confidence. Rate the severity as Mild, Moderate, or Severe with brief explanation."
-        severity = query_gemini(severity_prompt)
-        st.info(f"🩺 **Severity**: {severity}")
+        progress_bar = st.progress(0, text="Analyzing...")
+        for percent_complete in range(100):
+            time.sleep(0.01)
+            progress_bar.progress(percent_complete + 1, text=f"Confidence: {confidence * 100:.2f}%")
 
-        # ------------------ Ingredient Analysis ------------------
-        ingredients = st.text_area("🔍 Enter product ingredients (comma-separated):")
-        if ingredients:
-            ingredient_prompt = f"Analyze these ingredients for someone with {prediction}: {ingredients}. Identify helpful vs harmful ones."
-            analysis = query_gemini(ingredient_prompt)
-            st.markdown("📊 **Ingredient Analysis:**")
-            st.write(analysis)
+        remedies_prompt = f"Generate 5-6 actionable home remedies for someone with {prediction}. Format them as a bulleted list."
+        skincare_plan_prompt = f"Create a simple 7-day skincare plan (Morning and Night routine) for managing {prediction}. Be concise."
+        tips_prompt = f"Provide 3 essential tips for managing skin that is prone to {prediction}."
 
-        # ------------------ Personalized Skincare Plan ------------------
-        skin_type = st.selectbox("Your Skin Type", ["Oily", "Dry", "Combination", "Sensitive"])
-        age = st.slider("Your Age", 10, 70, 25)
-        plan_prompt = f"Generate a 7-day skincare routine for a {age}-year-old with {skin_type} skin suffering from {prediction}."
-        skincare_plan = query_gemini(plan_prompt)
-        st.markdown("📅 **Skincare Plan:**")
-        st.text(skincare_plan)
+        remedies = get_gemini_response(remedies_prompt)
+        skincare_plan = get_gemini_response(skincare_plan_prompt)
+        skin_type_tips = get_gemini_response(tips_prompt)
 
-        # ------------------ Gemini Q&A Chatbox ------------------
-        st.markdown("💬 **Ask a Dermatology-related Question:**")
-        user_q = st.text_input("Your question")
-        if user_q:
-            full_prompt = f"User has {prediction}. Question: {user_q}. Respond with medically relevant, educational insight (non-diagnostic)."
-            answer = query_gemini(full_prompt)
-            st.write(answer)
+    st.success("Analysis Complete!")
 
-        # ------------------ PDF Download ------------------
-        if st.button("📄 Generate PDF Report"):
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                path = generate_pdf_report(tmp.name, prediction, confidence, skincare_plan, severity)
-                with open(path, "rb") as f:
-                    st.download_button("⬇️ Download PDF Report", f, file_name="skin_report.pdf", mime="application/pdf")
+    with st.container(border=True):
+        st.markdown(f"### 🎯 Condition: **{prediction}**")
+        st.progress(confidence, text=f"Confidence: {confidence * 100:.2f}%")
+        st.markdown("---")
+
+        st.markdown("#### 💊 Gemini-Generated Remedies")
+        st.markdown(remedies)
+
+        with st.expander("🗓️ View 7-Day Skincare Plan"):
+            st.markdown(skincare_plan)
+
+        st.info(f"**🌿 Tips for {prediction}-Prone Skin:**\n{skin_type_tips}", icon="💡")
+
+    st.markdown("---")
+    st.subheader("👩‍⚕️ Consult Professionals")
+    st.markdown("Find top-rated dermatologists in your city for an expert consultation.")
+
+    city = st.text_input("Enter your city:", placeholder="e.g., Pune, Mumbai, Delhi")
+
+    if city:
+        with st.spinner(f"Finding dermatologists in {city}... (this may take a moment)"):
+            clinic_data = scrape_justdial(city)
+
+            if clinic_data is None:
+                st.error("Failed to fetch data. The website may be blocking requests or is temporarily down.")
+            elif not clinic_data:
+                st.warning(
+                    f"Could not find any dermatologists for '{city}' on Justdial. Please check the spelling or try a different major city.")
+            else:
+                st.success(f"Found {len(clinic_data)} top clinics in {city}:")
+                for clinic in clinic_data:
+                    with st.container(border=True):
+                        st.markdown(f"**🏨 {clinic['name']}**")
+                        st.text(f"📍 Location: {clinic['location']}")
+                        st.text(f"📞 Contact:  {clinic['contact']}")
+                st.caption("Data sourced from Justdial.com and may not be exhaustive.")
