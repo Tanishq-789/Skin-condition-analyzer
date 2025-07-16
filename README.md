@@ -44,8 +44,8 @@ skin-condition-app/
 
 1.  **Clone the Repository**
     ```bash
-    git clone [https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git](https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git)
-    cd YOUR_REPO_NAME
+    git clone https://github.com/Tanishq-789/Skin-condition-analyzer.git
+    cd Skin-condition-analyzer
     ```
 
 2.  **Create and Activate a Virtual Environment**
