@@ -107,9 +107,11 @@ def get_gemini_response(prompt):
         return f"Error communicating with Gemini: {e}"
 
 
+# In Skincare_rec.py
+
 def scrape_justdial(city: str):
     """
-    Scrapes dermatologist details from Justdial using Selenium to handle dynamic content.
+    Scrapes Justdial using a system-installed Chromium driver on Streamlit Cloud.
     """
     clinic_list = []
     sanitized_city = city.lower().strip().replace(" ", "-")
@@ -123,7 +125,10 @@ def scrape_justdial(city: str):
         options.add_argument(
             'user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
 
-        with webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options) as driver:
+        # UPDATED: Point directly to the system-installed chromedriver
+        service = Service(executable_path="/usr/bin/chromedriver")
+        
+        with webdriver.Chrome(service=service, options=options) as driver:
             driver.get(url)
             time.sleep(7)
             page_source = driver.page_source
@@ -146,9 +151,13 @@ def scrape_justdial(city: str):
                 clinic_list.append({"name": name, "location": location, "contact": contact})
 
     except Exception as e:
-        st.error(f"An error occurred during scraping: {e}")
+        # Provide a more specific error message for this common issue
+        if "Permission denied" in str(e) or "cannot find" in str(e):
+             st.error("Error with browser driver. Ensure 'chromium' and 'chromium-driver' are in packages.txt.")
+        else:
+            st.error(f"An error occurred during scraping: {e}")
         return None
-
+        
     return clinic_list
 
 
