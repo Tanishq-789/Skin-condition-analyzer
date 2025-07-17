@@ -5,6 +5,7 @@ import tensorflow as tf
 import google.generativeai as genai
 import time
 from bs4 import BeautifulSoup
+import urllib.parse
 import os
 import requests
 
@@ -92,48 +93,52 @@ def get_gemini_response(prompt):
 
 def scrape_justdial(city: str):
     """
-    Scrapes Justdial by calling its internal API directly.
-    This is much faster and more reliable than Selenium.
+    Scrapes Justdial reliably by using the ScrapingBee API to bypass anti-scraping measures.
     """
     clinic_list = []
-    # This is the API endpoint Justdial's website uses internally
-    api_url = "https://www.justdial.com/api/search"
+    api_key = st.secrets.get("SCRAPINGBEE_API_KEY")
+
+    if not api_key:
+        st.error("ScrapingBee API key not found. Please add it to your Streamlit secrets.")
+        return None
+
+    target_url = f"https://www.justdial.com/{city.lower().strip()}/Dermatologists"
     
-    # These headers mimic a real browser request
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Referer': f'https://www.justdial.com/{city.lower().strip()}/Dermatologists'
-    }
-    
-    # The payload sends the search parameters to the API
-    payload = {
-        "search": "Dermatologists",
-        "location": city.lower().strip(),
-        "national_search": 0,
-        "media_version": "2.1"
-        # ... other parameters can be added but are often not necessary
+    # Parameters for the ScrapingBee API request
+    params = {
+        'api_key': api_key,
+        'url': target_url,  # The URL we want to scrape
+        'render_js': 'true', # Tell ScrapingBee to run JavaScript, just like Selenium did
     }
 
     try:
-        response = requests.post(api_url, headers=headers, json=payload, timeout=15)
+        # We make a request to ScrapingBee, which then scrapes Justdial for us
+        response = requests.get('https://app.scrapingbee.com/api/v1/', params=params, timeout=30)
         response.raise_for_status()
         
-        data = response.json()
+        # ScrapingBee returns the HTML from the target page
+        soup = BeautifulSoup(response.content, 'html.parser')
         
-        # The results are nested within the JSON response
-        if data.get("results"):
-            for clinic in data["results"]:
+        # Now we parse the HTML as before
+        clinic_cards = soup.select("div.resultbox")
+
+        for card in clinic_cards:
+            name_element = card.select_one('h3.resultbox_title_anchor')
+            location_element = card.select_one('div.locatcity')
+            contact_element = card.select_one('span.callcontent')
+
+            if name_element:
                 clinic_list.append({
-                    "name": clinic.get("name", "N/A"),
-                    "location": clinic.get("address", "N/A"),
-                    "contact": clinic.get("contact_number", "N/A")
+                    "name": name_element.text.strip(),
+                    "location": location_element.text.strip() if location_element else "N/A",
+                    "contact": contact_element.text.strip() if contact_element else "N/A"
                 })
 
     except requests.exceptions.RequestException as e:
-        st.error(f"Failed to fetch data from Justdial's API: {e}")
+        st.error(f"Failed to fetch data via the scraping API: {e}")
         return None
     except Exception as e:
-        st.error(f"An error occurred while processing the data: {e}")
+        st.error(f"An error occurred while processing the scraped data: {e}")
         return None
         
     return clinic_list
