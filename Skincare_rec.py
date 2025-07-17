@@ -5,6 +5,8 @@ import tensorflow as tf
 import google.generativeai as genai
 import time
 from bs4 import BeautifulSoup
+import os
+import requests
 
 # --- New imports for the working scraper ---
 from selenium import webdriver
@@ -23,11 +25,59 @@ except Exception as e:
     st.error(f"Error configuring Gemini API: {e}")
     st.stop()
 
-try:
-    model = tf.keras.models.load_model("skin_model.keras")
-except Exception as e:
-    st.error(f"Error loading skin_model.keras: {e}")
+
+# --- NEW: FUNCTION TO DOWNLOAD AND CACHE THE MODEL ---
+@st.cache_resource
+def load_and_cache_model():
+    """
+    Downloads the model from Hugging Face if not already present,
+    then loads and returns it. This function is cached to run only once.
+    """
+    # Define the model path and the direct download URL
+    MODEL_PATH = "skin_model.keras"
+    # Note: The URL must be the direct raw file link, not the repository page.
+    MODEL_URL = "https://huggingface.co/Tanishq77/skin-condition-classifier/resolve/main/skin_model.keras"
+
+    # Download the model if it doesn't exist locally
+    if not os.path.exists(MODEL_PATH):
+        st.info("Downloading AI model... This may take a moment on first run.")
+        try:
+            response = requests.get(MODEL_URL, stream=True)
+            response.raise_for_status()  # Will raise an error for bad status codes
+
+            # Get total file size for the progress bar
+            total_size = int(response.headers.get('content-length', 0))
+            progress_bar = st.progress(0, text="Downloading Model...")
+
+            with open(MODEL_PATH, "wb") as f:
+                downloaded_size = 0
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+                    downloaded_size += len(chunk)
+                    # Update progress bar
+                    progress = min(int(100 * downloaded_size / total_size), 100) if total_size > 0 else 50
+                    progress_bar.progress(progress, text=f"Downloading Model... {progress}%")
+
+            progress_bar.empty()  # Remove the progress bar after completion
+        except requests.exceptions.RequestException as e:
+            st.error(f"Failed to download model. Check URL and internet connection. Error: {e}")
+            return None
+
+    # Load the model from the local file
+    try:
+        loaded_model = tf.keras.models.load_model(MODEL_PATH)
+        print("Model loaded successfully.")
+        return loaded_model
+    except Exception as e:
+        st.error(f"Error loading model from disk: {e}")
+        return None
+
+# Load the model using the new function
+model = load_and_cache_model()
+if model is None:
+    st.error("Model could not be loaded. The application cannot proceed.")
     st.stop()
+
 
 class_names = ["Acne", "Carcinoma", "Eczema", "Keratosis", "Milia", "Rosacea"]
 
@@ -40,6 +90,7 @@ def get_prediction(image):
     arr = np.array(img).astype("float32")
     arr = np.expand_dims(arr, axis=0)
     arr = tf.keras.applications.efficientnet_v2.preprocess_input(arr)
+    # The 'model' variable is now globally available and loaded
     preds = model.predict(arr)[0]
     idx = np.argmax(preds)
     confidence = float(preds[idx])
@@ -73,7 +124,6 @@ def scrape_justdial(city: str):
 
         with webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options) as driver:
             driver.get(url)
-            # Increased wait time for Justdial's dynamic content
             time.sleep(7)
             page_source = driver.page_source
 
