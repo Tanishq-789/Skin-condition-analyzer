@@ -88,47 +88,52 @@ def get_gemini_response(prompt):
         return f"Error communicating with Gemini: {e}"
 
 
+# In your app.py file, replace the old scrape_justdial function with this one.
+
 def scrape_justdial(city: str):
     """
-    Final working scraper using the hybrid approach for Streamlit Cloud.
+    Scrapes Justdial by calling its internal API directly.
+    This is much faster and more reliable than Selenium.
     """
     clinic_list = []
-    sanitized_city = city.lower().strip().replace(" ", "-")
-    url = f"https://www.justdial.com/{sanitized_city}/Dermatologists"
+    # This is the API endpoint Justdial's website uses internally
+    api_url = "https://www.justdial.com/api/search"
+    
+    # These headers mimic a real browser request
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Referer': f'https://www.justdial.com/{city.lower().strip()}/Dermatologists'
+    }
+    
+    # The payload sends the search parameters to the API
+    payload = {
+        "search": "Dermatologists",
+        "location": city.lower().strip(),
+        "national_search": 0,
+        "media_version": "2.1"
+        # ... other parameters can be added but are often not necessary
+    }
 
     try:
-        options = Options()
-        options.add_argument("--headless")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--window-size=1920x1080")
+        response = requests.post(api_url, headers=headers, json=payload, timeout=15)
+        response.raise_for_status()
         
-        # Use webdriver-manager to handle the driver
-        service = Service(ChromeDriverManager().install())
+        data = response.json()
         
-        with webdriver.Chrome(service=service, options=options) as driver:
-            driver.get(url)
-            time.sleep(7)
-            page_source = driver.page_source
-
-        soup = BeautifulSoup(page_source, 'html.parser')
-        clinic_cards = soup.select("div.resultbox")
-
-        for card in clinic_cards:
-            name_element = card.select_one('h3.resultbox_title_anchor')
-            location_element = card.select_one('div.locatcity')
-            contact_element = card.select_one('span.callcontent')
-
-            if name_element:
+        # The results are nested within the JSON response
+        if data.get("results"):
+            for clinic in data["results"]:
                 clinic_list.append({
-                    "name": name_element.text.strip(),
-                    "location": location_element.text.strip() if location_element else "N/A",
-                    "contact": contact_element.text.strip() if contact_element else "N/A"
+                    "name": clinic.get("name", "N/A"),
+                    "location": clinic.get("address", "N/A"),
+                    "contact": clinic.get("contact_number", "N/A")
                 })
 
+    except requests.exceptions.RequestException as e:
+        st.error(f"Failed to fetch data from Justdial's API: {e}")
+        return None
     except Exception as e:
-        st.error(f"An error occurred during scraping: {e}")
+        st.error(f"An error occurred while processing the data: {e}")
         return None
         
     return clinic_list
