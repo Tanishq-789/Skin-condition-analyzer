@@ -4,5 +4,5 @@ libxext6
 libgl1-mesa-glx
 libglib2.0-0
 libnss3
-chromium-browser
+chromium
 chromium-chromedriver
