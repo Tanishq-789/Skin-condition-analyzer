@@ -3,6 +3,6 @@ tensorflow
 Pillow
 google-generativeai
 selenium
-#webdriver-manager uncomment if running locally
+webdriver-manager
 beautifulsoup4
 requests
