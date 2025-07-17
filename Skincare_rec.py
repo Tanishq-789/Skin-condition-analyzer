@@ -13,6 +13,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
+
 # -------------------- CONFIG --------------------
 
 st.set_page_config(page_title="Skincare AI Assistant", layout="centered")
@@ -26,55 +27,49 @@ except Exception as e:
     st.stop()
 
 
-# --- NEW: FUNCTION TO DOWNLOAD AND CACHE THE MODEL ---
+# --- TFLite MODEL DOWNLOADING AND LOADING ---
 @st.cache_resource
-def load_and_cache_model():
+def load_and_cache_tflite_model():
     """
-    Downloads the model from Hugging Face if not already present,
-    then loads and returns it. This function is cached to run only once.
+    Downloads the TFLite model from Hugging Face if not already present,
+    then loads it into a TFLite Interpreter. This function is cached to run only once.
     """
-    # Define the model path and the direct download URL
-    MODEL_PATH = "skin_model.keras"
-    # Note: The URL must be the direct raw file link, not the repository page.
-    MODEL_URL = "https://huggingface.co/Tanishq77/skin-condition-classifier/resolve/main/skin_model.keras"
+    MODEL_PATH = "skin_model.tflite"
+    # CORRECT URL: This must be the direct download link (using /resolve/main/)
+    MODEL_URL = "https://huggingface.co/Tanishq77/skin-condition-classifier/resolve/main/skin_model.tflite"
 
-    # Download the model if it doesn't exist locally
     if not os.path.exists(MODEL_PATH):
         st.info("Downloading AI model... This may take a moment on first run.")
         try:
             response = requests.get(MODEL_URL, stream=True)
-            response.raise_for_status()  # Will raise an error for bad status codes
-
-            # Get total file size for the progress bar
+            response.raise_for_status()
             total_size = int(response.headers.get('content-length', 0))
             progress_bar = st.progress(0, text="Downloading Model...")
-
+            
             with open(MODEL_PATH, "wb") as f:
                 downloaded_size = 0
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
                     downloaded_size += len(chunk)
-                    # Update progress bar
                     progress = min(int(100 * downloaded_size / total_size), 100) if total_size > 0 else 50
                     progress_bar.progress(progress, text=f"Downloading Model... {progress}%")
-
-            progress_bar.empty()  # Remove the progress bar after completion
+            progress_bar.empty()
         except requests.exceptions.RequestException as e:
-            st.error(f"Failed to download model. Check URL and internet connection. Error: {e}")
+            st.error(f"Failed to download model: {e}")
             return None
 
-    # Load the model from the local file
     try:
-        loaded_model = tf.keras.models.load_model(MODEL_PATH)
-        print("Model loaded successfully.")
-        return loaded_model
+        interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
+        interpreter.allocate_tensors()
+        print("TFLite model loaded successfully.")
+        return interpreter
     except Exception as e:
-        st.error(f"Error loading model from disk: {e}")
+        st.error(f"Error loading TFLite model: {e}")
         return None
 
-# Load the model using the new function
-model = load_and_cache_model()
-if model is None:
+# Load the interpreter using the cached function
+interpreter = load_and_cache_tflite_model()
+if interpreter is None:
     st.error("Model could not be loaded. The application cannot proceed.")
     st.stop()
 
@@ -85,13 +80,19 @@ class_names = ["Acne", "Carcinoma", "Eczema", "Keratosis", "Milia", "Rosacea"]
 # -------------------- BACKEND FUNCTIONS --------------------
 
 def get_prediction(image):
-    """Resize, preprocess, and predict the skin condition from an image."""
-    img = image.resize((224, 224))
+    """Resize, preprocess, and predict using the TFLite interpreter."""
+    input_details = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
+    
+    img = image.resize((input_details[0]['shape'][1], input_details[0]['shape'][2]))
     arr = np.array(img).astype("float32")
     arr = np.expand_dims(arr, axis=0)
     arr = tf.keras.applications.efficientnet_v2.preprocess_input(arr)
-    # The 'model' variable is now globally available and loaded
-    preds = model.predict(arr)[0]
+
+    interpreter.set_tensor(input_details[0]['index'], arr)
+    interpreter.invoke()
+    
+    preds = interpreter.get_tensor(output_details[0]['index'])[0]
     idx = np.argmax(preds)
     confidence = float(preds[idx])
     return class_names[idx], confidence
@@ -142,7 +143,6 @@ def scrape_justdial(city: str):
                 name = name_element.text.strip()
                 location = location_element.text.strip() if location_element else "Location not available"
                 contact = contact_element.text.strip() if contact_element else "Contact not available"
-
                 clinic_list.append({"name": name, "location": location, "contact": contact})
 
     except Exception as e:
