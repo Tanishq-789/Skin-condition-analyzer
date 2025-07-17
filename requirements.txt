@@ -2,6 +2,5 @@ streamlit
 tensorflow
 Pillow
 google-generativeai
-selenium
 beautifulsoup4
 requests
