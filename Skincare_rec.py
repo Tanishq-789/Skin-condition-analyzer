@@ -5,15 +5,8 @@ import tensorflow as tf
 import google.generativeai as genai
 import time
 from bs4 import BeautifulSoup
-import urllib.parse
 import os
 import requests
-
-# --- Imports for the final working scraper ---
-# from selenium import webdriver
-# from selenium.webdriver.chrome.service import Service
-# from webdriver_manager.chrome import ChromeDriverManager
-# from selenium.webdriver.chrome.options import Options
 
 # -------------------- CONFIG --------------------
 
@@ -89,78 +82,86 @@ def get_gemini_response(prompt):
         return f"Error communicating with Gemini: {e}"
 
 
-# In your app.py file, replace the old scrape_justdial function with this one.
-
-def scrape_justdial(city: str):
-    """
-    Scrapes Justdial reliably by using the ScrapingBee API to bypass anti-scraping measures.
-    """
+def scrape_with_api(city: str):
+    """Scrapes Justdial via its internal API (fast, for deployment)."""
     clinic_list = []
-    api_key = st.secrets.get("SCRAPINGBEE_API_KEY")
-
-    if not api_key:
-        st.error("ScrapingBee API key not found. Please add it to your Streamlit secrets.")
-        return None
-
-    target_url = f"https://www.justdial.com/{city.lower().strip()}/Dermatologists"
-    
-    # Parameters for the ScrapingBee API request
-    params = {
-        'api_key': api_key,
-        'url': target_url,  # The URL we want to scrape
-        'render_js': 'true', # Tell ScrapingBee to run JavaScript, just like Selenium did
+    api_url = "https://www.justdial.com/api/search"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Referer': f'https://www.justdial.com/{city.lower().strip()}/Dermatologists'
     }
+    payload = {"search": "Dermatologists", "location": city.lower().strip()}
 
     try:
-        # We make a request to ScrapingBee, which then scrapes Justdial for us
-        response = requests.get('https://app.scrapingbee.com/api/v1/', params=params, timeout=30)
+        response = requests.post(api_url, headers=headers, json=payload, timeout=15)
         response.raise_for_status()
-        
-        # ScrapingBee returns the HTML from the target page
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Now we parse the HTML as before
-        clinic_cards = soup.select("div.resultbox")
+        data = response.json()
+        if data.get("results"):
+            for clinic in data["results"]:
+                clinic_list.append({
+                    "name": clinic.get("name", "N/A"),
+                    "location": clinic.get("address", "N/A"),
+                    "contact": clinic.get("contact_number", "N/A")
+                })
+    except Exception as e:
+        st.error(f"Failed to fetch data using API method: {e}")
+        return None
+    return clinic_list
 
+
+def scrape_with_selenium(city: str):
+    """Scrapes Justdial using Selenium (resource-heavy, for local testing only)."""
+    # --- IMPORTS MOVED INSIDE THE FUNCTION ---
+    # This prevents the deployed app from crashing.
+    from selenium import webdriver
+    from selenium.webdriver.chrome.service import Service
+    from webdriver_manager.chrome import ChromeDriverManager
+    from selenium.webdriver.chrome.options import Options
+
+    clinic_list = []
+    url = f"https://www.justdial.com/{city.lower().strip()}/Dermatologists"
+    try:
+        options = Options()
+        options.add_argument("--headless")
+        options.add_argument("--no-sandbox")
+        service = Service(ChromeDriverManager().install())
+        with webdriver.Chrome(service=service, options=options) as driver:
+            driver.get(url)
+            time.sleep(7)
+            page_source = driver.page_source
+        soup = BeautifulSoup(page_source, 'html.parser')
+        clinic_cards = soup.select("div.resultbox")
         for card in clinic_cards:
             name_element = card.select_one('h3.resultbox_title_anchor')
-            location_element = card.select_one('div.locatcity')
-            contact_element = card.select_one('span.callcontent')
-
             if name_element:
+                location_element = card.select_one('div.locatcity')
+                contact_element = card.select_one('span.callcontent')
                 clinic_list.append({
                     "name": name_element.text.strip(),
                     "location": location_element.text.strip() if location_element else "N/A",
                     "contact": contact_element.text.strip() if contact_element else "N/A"
                 })
-
-    except requests.exceptions.RequestException as e:
-        st.error(f"Failed to fetch data via the scraping API: {e}")
-        return None
     except Exception as e:
-        st.error(f"An error occurred while processing the scraped data: {e}")
+        st.error(f"An error occurred during Selenium scraping: {e}")
         return None
-        
     return clinic_list
 
 
 # -------------------- STREAMLIT UI --------------------
 st.title("🌿 AI Skincare Assistant")
-st.markdown("Upload a clear image of your skin concern, and our AI will analyze it and suggest remedies.")
+st.markdown("Upload a clear image of your skin concern for an AI-powered analysis, recommendations, and help finding local professionals.")
+st.warning("⚠️ **Disclaimer:** This tool is for educational purposes and is not a substitute for professional medical advice.")
 
 uploaded_file = st.file_uploader("📷 Upload a clear skin image", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
-    # ... (The rest of your UI code remains exactly the same) ...
     image = Image.open(uploaded_file).convert("RGB")
-
     with st.spinner("Analyzing your skin and preparing recommendations..."):
         prediction, confidence = get_prediction(image)
-        remedies_prompt = f"Generate 5-6 actionable home remedies for someone with {prediction}. Format them as a bulleted list."
+        remedies_prompt = f"Generate 5-6 actionable home remedies for {prediction}. Format as a bulleted list."
         remedies = get_gemini_response(remedies_prompt)
 
     st.success("Analysis Complete!")
-
     with st.container(border=True):
         st.markdown(f"### 🎯 Condition: **{prediction}**")
         st.progress(confidence, text=f"Confidence: {confidence * 100:.2f}%")
@@ -174,9 +175,16 @@ if uploaded_file:
 
     if city:
         with st.spinner(f"Finding dermatologists in {city}..."):
-            clinic_data = scrape_justdial(city)
+            scraper_mode = os.getenv("SCRAPER_MODE", "api")
+
+            if scraper_mode == "selenium":
+                st.info("Running in local Selenium mode...")
+                clinic_data = scrape_with_selenium(city)
+            else:
+                clinic_data = scrape_with_api(city)
+            
             if clinic_data:
-                st.success(f"Found {len(clinic_data)} top clinics in {city}:")
+                st.success(f"Found {len(clinic_data)} clinics in {city}:")
                 for clinic in clinic_data:
                     with st.container(border=True):
                         st.markdown(f"**🏨 {clinic['name']}**")
