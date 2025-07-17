@@ -3,6 +3,6 @@ tensorflow
 Pillow
 google-generativeai
 selenium
-webdriver-manager-chrome
+webdriver-manager
 beautifulsoup4
 requests
