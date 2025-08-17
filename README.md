@@ -84,6 +84,16 @@ skin-condition-app/
 
 ---
 
+## 📚 References & Additional Efforts
+
+To ensure genuine implementation and best practices, I referred to the official Keras documentation and examples for fine-tuning **EfficientNet models**:
+
+- [Keras EfficientNet Fine-Tuning Example](https://keras.io/examples/vision/image_classification_efficientnet_fine_tuning/)
+
+This served as a baseline reference while adapting and customizing the model training pipeline for skin condition classification.
+
+---
+
 ## 📦 Tech Stack
 
 -   **Framework**: Streamlit
